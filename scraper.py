@@ -1,4 +1,3 @@
-```python
 #!/usr/bin/env python3
 """
 DanangMLS scraper
@@ -1036,4 +1035,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-```
