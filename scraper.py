@@ -120,16 +120,26 @@ def parse_relative_date(text: str) -> str:
 
 
 def parse_json_ld(soup: BeautifulSoup) -> dict:
-    """DanangMLS embeds a <script type="application/ld+json"> RealEstateListing
-    block on every listing page -- this is far more reliable than guessing at
-    CSS selectors, since it's structured data meant to be machine-read."""
-    tag = soup.find("script", type="application/ld+json")
-    if not tag or not tag.string:
-        return {}
-    try:
-        return json.loads(tag.string)
-    except (json.JSONDecodeError, TypeError):
-        return {}
+    """DanangMLS embeds one or more <script type="application/ld+json"> blocks
+    per page -- often a generic site-wide block PLUS a per-listing
+    RealEstateListing block. We must pick the RealEstateListing one
+    specifically, not just the first script tag found, or we silently pull
+    generic site metadata instead of the actual listing data."""
+    for tag in soup.find_all("script", type="application/ld+json"):
+        if not tag.string:
+            continue
+        try:
+            data = json.loads(tag.string)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict) and item.get("@type") == "RealEstateListing":
+                    return item
+            continue
+        if isinstance(data, dict) and data.get("@type") == "RealEstateListing":
+            return data
+    return {}
 
 
 def extract_contact_phone(description: str) -> str:
