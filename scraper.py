@@ -108,15 +108,38 @@ def polite_get(session: requests.Session, url: str, delay: float) -> BeautifulSo
 
 
 def parse_relative_date(text: str) -> str:
-    """Convert '2 months ago' / '5 days ago' style text into an ISO date."""
+    """Convert 'X hours/days/weeks/months/years ago' style text into an ISO date."""
     text = text.lower().strip()
-    m = re.search(r"(\d+)\s+(day|week|month|year)s?\s+ago", text)
+    m = re.search(r"(\d+)\s+(minute|hour|day|week|month|year)s?\s+ago", text)
     if not m:
         return ""
     n, unit = int(m.group(1)), m.group(2)
-    days_per_unit = {"day": 1, "week": 7, "month": 30, "year": 365}
+    days_per_unit = {"minute": 1/1440, "hour": 1/24, "day": 1, "week": 7, "month": 30, "year": 365}
     delta = timedelta(days=n * days_per_unit[unit])
     return (datetime.utcnow() - delta).date().isoformat()
+
+
+def parse_json_ld(soup: BeautifulSoup) -> dict:
+    """DanangMLS embeds a <script type="application/ld+json"> RealEstateListing
+    block on every listing page -- this is far more reliable than guessing at
+    CSS selectors, since it's structured data meant to be machine-read."""
+    tag = soup.find("script", type="application/ld+json")
+    if not tag or not tag.string:
+        return {}
+    try:
+        return json.loads(tag.string)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def extract_contact_phone(description: str) -> str:
+    """Pull a phone/Zalo number out of the free-text description instead of
+    keeping the raw JSON-LD blob. Falls back to '' if nothing found."""
+    m = re.search(r"(?:Zalo|WhatsApp)[^\d]{0,15}(\+?\d[\d\s.]{7,})", description)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"\b(0\d{2,3}[\s.]?\d{3}[\s.]?\d{3,4})\b", description)
+    return m.group(1).strip() if m else ""
 
 
 def extract_coords_from_map(soup: BeautifulSoup) -> tuple[float | None, float | None]:
@@ -137,79 +160,95 @@ def extract_coords_from_map(soup: BeautifulSoup) -> tuple[float | None, float | 
 
 def parse_listing_page(soup: BeautifulSoup, url: str) -> Listing:
     listing = Listing(url=url)
+    ld = parse_json_ld(soup)
 
+    # --- Title ---
     h1 = soup.find("h1")
-    if h1:
-        listing.title = h1.get_text(strip=True)
+    listing.title = h1.get_text(strip=True) if h1 else ld.get("name", "")
 
-    # Price like "$114,000"
-    price_tag = soup.find(string=re.compile(r"^\$[\d,]+$"))
-    if price_tag:
-        listing.price_usd = float(price_tag.strip().replace("$", "").replace(",", ""))
+    # --- Price: prefer JSON-LD ("$114,000" or a "$X - $Y" range -> take the low end) ---
+    price_str = ld.get("price", "")
+    if not price_str:
+        price_tag = soup.find(string=re.compile(r"^\$[\d,]+"))
+        price_str = price_tag.strip() if price_tag else ""
+    price_match = re.search(r"\$([\d,]+)", price_str)
+    if price_match:
+        listing.price_usd = float(price_match.group(1).replace(",", ""))
 
-    # District: look for a link back to /for-sale/<district>
-    district_link = soup.find("a", href=re.compile(r"/for-sale/[a-z-]+$"))
-    if district_link:
-        listing.district = district_link.get_text(strip=True)
+    # --- District: JSON-LD addressLocality is authoritative and structured ---
+    address = ld.get("address", {}) if isinstance(ld.get("address"), dict) else {}
+    locality = address.get("addressLocality", "")
+    listing.district = locality if locality and locality.lower() != "not provided" else ""
 
-    # "Listed 🗓 2 months ago"
-    listed_tag = soup.find(string=re.compile(r"ago$"))
-    if listed_tag:
-        listing.listed_text = listed_tag.strip()
-        listing.listed_approx_date = parse_relative_date(listing.listed_text)
-
-    # Bedrooms
-    bed_tag = soup.find(string=re.compile(r"\d+\s+Bedrooms?"))
-    if bed_tag:
-        m = re.search(r"(\d+)", bed_tag)
-        if m:
-            listing.bedrooms = int(m.group(1))
-
-    # Size in m^2 -- scan description text for e.g. "204m²" or "180 m2"
-    body_text = soup.get_text(" ", strip=True)
-    size_match = re.search(r"(\d{2,4}(?:[.,]\d+)?)\s*m2|(\d{2,4}(?:[.,]\d+)?)\s*m\u00b2", body_text)
-    if size_match:
-        raw = (size_match.group(1) or size_match.group(2)).replace(",", "")
+    # --- Bedrooms: JSON-LD numberOfRooms (land correctly shows 0, not a stray "1") ---
+    rooms_str = ld.get("numberOfRooms")
+    if rooms_str is not None:
         try:
-            listing.size_m2 = float(raw)
+            listing.bedrooms = int(rooms_str)
+        except (ValueError, TypeError):
+            pass
+
+    # --- Description: prefer JSON-LD description (full text), fallback to page ---
+    listing.description = (ld.get("description") or "").strip()
+    if not listing.description:
+        desc_header = soup.find(["h2", "h3"], string=re.compile("Description", re.I))
+        if desc_header:
+            parts = []
+            for sib in desc_header.find_next_siblings():
+                if sib.name in ("h2", "h3"):
+                    break
+                parts.append(sib.get_text(" ", strip=True))
+            listing.description = " ".join(parts)[:1500]
+
+    # --- Size in m^2: check description for m2/m²/sqm/"square meters", prefer an
+    # explicit "Area: Xm2" style line over the first stray number in the text ---
+    size_pattern = r"(\d{1,3}(?:[.,]\d{3})*(?:\.\d+)?)\s*(?:m2|m\u00b2|sqm|square meters?)"
+    area_line = re.search(r"(?:Area|Certified Area)[:\s]+" + size_pattern, listing.description, re.I)
+    size_match = area_line or re.search(size_pattern, listing.description, re.I)
+    if size_match:
+        raw = size_match.group(1).replace(",", "")
+        try:
+            val = float(raw)
+            if val > 0:
+                listing.size_m2 = val
         except ValueError:
             pass
 
     if listing.price_usd and listing.size_m2:
         listing.price_per_m2_usd = round(listing.price_usd / listing.size_m2, 2)
 
-    # Property type from breadcrumb-ish link e.g. /for-sale/land
-    type_link = soup.find("a", href=re.compile(r"/for-sale/(land|house|apartment|villa|townhouse)"))
+    # --- Property type from breadcrumb link e.g. /for-sale/land ---
+    type_link = soup.find("a", href=re.compile(r"/for-sale/(land|house|apartment|villa|townhouse)$"))
     if type_link:
         listing.property_type = type_link.get_text(strip=True)
-
-    # Contact block
-    contact_block = soup.find(string=re.compile(r"Zalo|WhatsApp"))
-    if contact_block:
-        parent = contact_block.find_parent()
-        if parent:
-            listing.contact = parent.get_text(" ", strip=True)
-
-    agent_tag = soup.find(string=re.compile("Agent"))
-    if agent_tag:
-        parent = agent_tag.find_parent()
-        if parent:
-            sib_text = parent.get_text(" ", strip=True).replace("Agent", "").strip()
-            listing.agent = sib_text
-
-    # Description
-    desc_header = soup.find(["h2", "h3"], string=re.compile("Description", re.I))
-    if desc_header:
-        desc_parts = []
-        for sib in desc_header.find_next_siblings():
-            if sib.name in ("h2", "h3"):
+    elif "type" in url or True:
+        # fallback: infer from URL path segment used when crawling
+        for t in TYPE_SLUGS:
+            if f"/{t}" in url or (ld.get("name", "").lower().find(t) != -1):
+                listing.property_type = t.capitalize()
                 break
-            desc_parts.append(sib.get_text(" ", strip=True))
-        listing.description = " ".join(desc_parts)[:1000]
+
+    # --- Contact: extract a real phone/Zalo number from the description text,
+    # not the raw JSON-LD blob ---
+    listing.contact = extract_contact_phone(listing.description)
 
     listing.latitude, listing.longitude = extract_coords_from_map(soup)
 
     return listing
+
+
+def dedupe_listings(listings: list[Listing]) -> list[Listing]:
+    """Several agents on this site repost the same physical plot under
+    different titles/URLs. Collapse obvious duplicates: same price + same
+    size + same district. Keeps the most recently scraped copy."""
+    seen: dict[tuple, Listing] = {}
+    for l in listings:
+        key = (l.price_usd, l.size_m2, l.district)
+        if key == (None, None, "") :
+            seen[l.url] = l  # not enough info to dedupe safely, keep as-is
+            continue
+        seen[key] = l
+    return list(seen.values())
 
 
 def build_listing_index_url(page: int, district: str | None, ptype: str | None) -> str:
@@ -317,6 +356,11 @@ def main():
     args = parser.parse_args()
 
     listings = crawl(args)
+    before = len(listings)
+    listings = dedupe_listings(listings)
+    if before != len(listings):
+        print(f"\nDe-duplicated: {before} -> {len(listings)} listings "
+              f"(removed {before - len(listings)} likely reposts)")
     save_outputs(listings, args.outdir)
 
 
