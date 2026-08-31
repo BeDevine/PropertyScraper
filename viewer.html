@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Da Nang Land Ledger</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --ink:#16241f;
+    --paper:#f1ece0;
+    --paper-raised:#faf7ef;
+    --line:#c9bd9e;
+    --ocean:#12333a;
+    --lagoon:#2c7873;
+    --coral:#c1502e;
+    --muted:#6b6a5c;
+    --font-display: 'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
+    --font-body: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--font-body);
+    font-size:14px;
+  }
+  header{
+    padding:28px 28px 18px;
+    border-bottom:2px solid var(--ink);
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  header h1{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:28px;
+    margin:0;
+    letter-spacing:0.2px;
+  }
+  header p{
+    margin:4px 0 0;
+    color:var(--muted);
+    max-width:46ch;
+    font-size:13px;
+  }
+  .upload-area{
+    text-align:right;
+    font-size:12.5px;
+    color:var(--muted);
+  }
+  .upload-area input{ display:none; }
+  .upload-btn{
+    display:inline-block;
+    padding:8px 14px;
+    border:1px solid var(--ink);
+    background:var(--paper-raised);
+    cursor:pointer;
+    font-size:12.5px;
+  }
+  .upload-btn:hover{ background:var(--ink); color:var(--paper-raised); }
+
+  .toolbar{
+    display:flex;
+    flex-wrap:wrap;
+    gap:0;
+    border-bottom:1px solid var(--line);
+    background:var(--paper-raised);
+  }
+  .field{
+    padding:12px 18px;
+    border-right:1px solid var(--line);
+    min-width:150px;
+  }
+  .field label{
+    display:block;
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--muted);
+    margin-bottom:5px;
+  }
+  .field select, .field input{
+    font-family:var(--font-mono);
+    font-size:13px;
+    border:none;
+    background:transparent;
+    color:var(--ink);
+    width:100%;
+    padding:0;
+  }
+  .field select:focus, .field input:focus{ outline:none; border-bottom:1px solid var(--coral); }
+  .range-pair{ display:flex; gap:8px; }
+  .range-pair input{ width:70px; }
+
+  .stats{
+    padding:12px 18px;
+    display:flex;
+    gap:26px;
+    align-items:center;
+    margin-left:auto;
+    border-right:none;
+  }
+  .stat{ text-align:right; }
+  .stat .n{ font-family:var(--font-mono); font-size:17px; }
+  .stat .l{ font-size:10.5px; text-transform:uppercase; color:var(--muted); letter-spacing:0.06em; }
+
+  .view-toggle{ display:flex; border-right:1px solid var(--line); }
+  .view-toggle button{
+    font-family:var(--font-body);
+    font-size:12.5px;
+    padding:0 16px;
+    border:none;
+    background:transparent;
+    cursor:pointer;
+    color:var(--muted);
+  }
+  .view-toggle button.active{ color:var(--ink); font-weight:600; text-decoration:underline; text-underline-offset:3px; }
+
+  main{ padding:0; }
+  #tableView table{
+    width:100%;
+    border-collapse:collapse;
+  }
+  #tableView th{
+    text-align:left;
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    color:var(--muted);
+    padding:10px 16px;
+    border-bottom:1px solid var(--ink);
+    cursor:pointer;
+    white-space:nowrap;
+    position:sticky;
+    top:0;
+    background:var(--paper);
+  }
+  #tableView th:hover{ color:var(--ink); }
+  #tableView td{
+    padding:11px 16px;
+    border-bottom:1px solid var(--line);
+    vertical-align:top;
+  }
+  #tableView tr:hover td{ background:var(--paper-raised); }
+  .title-cell a{ color:var(--ink); text-decoration:none; font-weight:600; }
+  .title-cell a:hover{ color:var(--coral); }
+  .sub{ color:var(--muted); font-size:12px; margin-top:2px; }
+  .num{ font-family:var(--font-mono); }
+  .tag{
+    display:inline-block;
+    font-size:10.5px;
+    padding:2px 7px;
+    border:1px solid var(--line);
+    border-radius:2px;
+    color:var(--muted);
+  }
+  .fresh{ color:var(--lagoon); border-color:var(--lagoon); }
+
+  #mapView{ height:calc(100vh - 172px); display:none; }
+  #mapView.active{ display:block; }
+  #tableView.hidden{ display:none; }
+
+  .empty{
+    padding:60px 28px;
+    text-align:center;
+    color:var(--muted);
+    font-family:var(--font-display);
+    font-size:16px;
+  }
+  .leaflet-popup-content{ font-family:var(--font-body); font-size:13px; }
+  .leaflet-popup-content b{ display:block; margin-bottom:4px; }
+  .leaflet-popup-content a{ color:var(--coral); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Da Nang Land Ledger</h1>
+    <p>Loads whatever your scraper collects. Filter by district, price, size — browse as a table or a map.</p>
+  </div>
+  <div class="upload-area">
+    <label class="upload-btn" for="fileInput">Load listings.json</label>
+    <input type="file" id="fileInput" accept="application/json">
+    <div id="loadStatus" style="margin-top:6px;">Showing sample data — load your own scrape to replace it.</div>
+  </div>
+</header>
+
+<div class="toolbar">
+  <div class="field">
+    <label>District</label>
+    <select id="districtFilter"><option value="">All</option></select>
+  </div>
+  <div class="field">
+    <label>Type</label>
+    <select id="typeFilter"><option value="">All</option></select>
+  </div>
+  <div class="field">
+    <label>Price (USD)</label>
+    <div class="range-pair">
+      <input type="number" id="priceMin" placeholder="min">
+      <input type="number" id="priceMax" placeholder="max">
+    </div>
+  </div>
+  <div class="field">
+    <label>Size (m&sup2;)</label>
+    <div class="range-pair">
+      <input type="number" id="sizeMin" placeholder="min">
+      <input type="number" id="sizeMax" placeholder="max">
+    </div>
+  </div>
+  <div class="field">
+    <label>Sort by</label>
+    <select id="sortBy">
+      <option value="price_asc">Price, low to high</option>
+      <option value="price_desc">Price, high to low</option>
+      <option value="ppm2_asc">Price/m&sup2;, low to high</option>
+      <option value="size_desc">Size, largest first</option>
+      <option value="newest">Most recently listed</option>
+    </select>
+  </div>
+  <div class="view-toggle">
+    <button id="btnTable" class="active">Table</button>
+    <button id="btnMap">Map</button>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="n" id="statCount">0</div><div class="l">Listings</div></div>
+    <div class="stat"><div class="n" id="statMedPrice">–</div><div class="l">Median price</div></div>
+    <div class="stat"><div class="n" id="statMedPpm2">–</div><div class="l">Median $/m&sup2;</div></div>
+  </div>
+</div>
+
+<main>
+  <div id="tableView">
+    <table>
+      <thead>
+        <tr>
+          <th data-key="title">Listing</th>
+          <th data-key="district">District</th>
+          <th data-key="property_type">Type</th>
+          <th data-key="price_usd">Price</th>
+          <th data-key="size_m2">Size</th>
+          <th data-key="price_per_m2_usd">$/m&sup2;</th>
+          <th data-key="listed_text">Listed</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="emptyMsg" style="display:none;">No listings match these filters.</div>
+  </div>
+  <div id="mapView"></div>
+</main>
+
+<script>
+let allListings = [];
+let map, markerLayer;
+
+const fmtUSD = v => v == null ? '—' : '$' + Math.round(v).toLocaleString();
+const fmtSize = v => v == null ? '—' : Math.round(v).toLocaleString() + ' m²';
+
+function isFresh(listedText){
+  if(!listedText) return false;
+  const m = listedText.match(/(\d+)\s+(day|week)/);
+  return !!m; // days or weeks ago = fresh-ish; months/years are not
+}
+
+function populateSelect(id, values){
+  const sel = document.getElementById(id);
+  sel.innerHTML = '<option value="">All</option>';
+  [...new Set(values.filter(Boolean))].sort().forEach(v=>{
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v;
+    sel.appendChild(opt);
+  });
+}
+
+function median(arr){
+  if(!arr.length) return null;
+  const s = [...arr].sort((a,b)=>a-b);
+  const mid = Math.floor(s.length/2);
+  return s.length % 2 ? s[mid] : (s[mid-1]+s[mid])/2;
+}
+
+function getFiltered(){
+  const district = document.getElementById('districtFilter').value;
+  const type = document.getElementById('typeFilter').value;
+  const priceMin = parseFloat(document.getElementById('priceMin').value);
+  const priceMax = parseFloat(document.getElementById('priceMax').value);
+  const sizeMin = parseFloat(document.getElementById('sizeMin').value);
+  const sizeMax = parseFloat(document.getElementById('sizeMax').value);
+
+  let list = allListings.filter(l=>{
+    if(district && l.district !== district) return false;
+    if(type && l.property_type !== type) return false;
+    if(!isNaN(priceMin) && (l.price_usd == null || l.price_usd < priceMin)) return false;
+    if(!isNaN(priceMax) && (l.price_usd == null || l.price_usd > priceMax)) return false;
+    if(!isNaN(sizeMin) && (l.size_m2 == null || l.size_m2 < sizeMin)) return false;
+    if(!isNaN(sizeMax) && (l.size_m2 == null || l.size_m2 > sizeMax)) return false;
+    return true;
+  });
+
+  const sortBy = document.getElementById('sortBy').value;
+  const byNum = (key, dir) => (a,b) => {
+    const av = a[key], bv = b[key];
+    if(av == null && bv == null) return 0;
+    if(av == null) return 1;
+    if(bv == null) return -1;
+    return dir * (av - bv);
+  };
+  if(sortBy === 'price_asc') list.sort(byNum('price_usd', 1));
+  else if(sortBy === 'price_desc') list.sort(byNum('price_usd', -1));
+  else if(sortBy === 'ppm2_asc') list.sort(byNum('price_per_m2_usd', 1));
+  else if(sortBy === 'size_desc') list.sort(byNum('size_m2', -1));
+  else if(sortBy === 'newest') list.sort((a,b)=> (b.listed_approx_date||'').localeCompare(a.listed_approx_date||''));
+
+  return list;
+}
+
+function render(){
+  const list = getFiltered();
+
+  document.getElementById('statCount').textContent = list.length;
+  document.getElementById('statMedPrice').textContent = fmtUSD(median(list.map(l=>l.price_usd).filter(v=>v!=null)));
+  document.getElementById('statMedPpm2').textContent = fmtUSD(median(list.map(l=>l.price_per_m2_usd).filter(v=>v!=null)));
+
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  document.getElementById('emptyMsg').style.display = list.length ? 'none' : 'block';
+
+  list.forEach(l=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="title-cell">
+        <a href="${l.url}" target="_blank" rel="noopener">${l.title || 'Untitled listing'}</a>
+        ${l.description ? `<div class="sub">${l.description.slice(0,110)}${l.description.length>110?'…':''}</div>` : ''}
+      </td>
+      <td>${l.district || '—'}</td>
+      <td>${l.property_type || '—'}</td>
+      <td class="num">${fmtUSD(l.price_usd)}</td>
+      <td class="num">${fmtSize(l.size_m2)}</td>
+      <td class="num">${l.price_per_m2_usd ? '$'+Math.round(l.price_per_m2_usd) : '—'}</td>
+      <td><span class="tag ${isFresh(l.listed_text) ? 'fresh' : ''}">${l.listed_text || 'unknown'}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  renderMap(list);
+}
+
+function renderMap(list){
+  if(!map) return;
+  markerLayer.clearLayers();
+  const pts = list.filter(l=> l.latitude != null && l.longitude != null);
+  pts.forEach(l=>{
+    const m = L.circleMarker([l.latitude, l.longitude], {
+      radius: 7, color:'#c1502e', weight:1.5, fillColor:'#c1502e', fillOpacity:0.55
+    });
+    m.bindPopup(`<b>${l.title}</b>${fmtUSD(l.price_usd)}${l.size_m2? ' · '+fmtSize(l.size_m2):''}<br><a href="${l.url}" target="_blank" rel="noopener">Open listing →</a>`);
+    m.addTo(markerLayer);
+  });
+  if(pts.length){
+    map.fitBounds(pts.map(p=>[p.latitude,p.longitude]), {padding:[30,30], maxZoom:15});
+  }
+}
+
+function initMap(){
+  map = L.map('mapView').setView([16.02, 108.24], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+  }).addTo(map);
+  markerLayer = L.layerGroup().addTo(map);
+}
+
+function loadData(data){
+  allListings = data;
+  populateSelect('districtFilter', data.map(l=>l.district));
+  populateSelect('typeFilter', data.map(l=>l.property_type));
+  render();
+}
+
+document.getElementById('fileInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = evt=>{
+    try{
+      const data = JSON.parse(evt.target.result);
+      loadData(data);
+      document.getElementById('loadStatus').textContent = `Loaded ${data.length} listings from ${file.name}`;
+    }catch(err){
+      document.getElementById('loadStatus').textContent = 'Could not parse that file as JSON.';
+    }
+  };
+  reader.readAsText(file);
+});
+
+['districtFilter','typeFilter','sortBy'].forEach(id=>
+  document.getElementById(id).addEventListener('change', render));
+['priceMin','priceMax','sizeMin','sizeMax'].forEach(id=>
+  document.getElementById(id).addEventListener('input', render));
+
+document.querySelectorAll('#tableView th').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const key = th.dataset.key;
+    const map = {title:'title', district:'district', property_type:'property_type',
+      price_usd:'price_asc', size_m2:'size_desc', price_per_m2_usd:'ppm2_asc', listed_text:'newest'};
+    if(map[key]) { document.getElementById('sortBy').value = map[key]; render(); }
+  });
+});
+
+document.getElementById('btnTable').addEventListener('click', ()=>{
+  document.getElementById('btnTable').classList.add('active');
+  document.getElementById('btnMap').classList.remove('active');
+  document.getElementById('tableView').classList.remove('hidden');
+  document.getElementById('mapView').classList.remove('active');
+});
+document.getElementById('btnMap').addEventListener('click', ()=>{
+  document.getElementById('btnMap').classList.add('active');
+  document.getElementById('btnTable').classList.remove('active');
+  document.getElementById('tableView').classList.add('hidden');
+  document.getElementById('mapView').classList.add('active');
+  if(!map) initMap();
+  setTimeout(()=>{ map.invalidateSize(); renderMap(getFiltered()); }, 50);
+});
+
+// Embedded sample data so the viewer works the moment you open it.
+const SAMPLE = [{"title": "Prime Land in Khu\u00ea M\u1ef9 \u0110\u00f4ng for Sale", "url": "https://danangmls.com/listing/prime-land-in-khu-m-ng-for-sale-dswycl", "price_usd": 114000, "size_m2": 204, "price_per_m2_usd": 559, "bedrooms": 0, "property_type": "Land", "district": "Ngu Hanh Son", "listed_text": "2 months ago", "listed_approx_date": "2026-07-01", "latitude": 16.0, "longitude": 108.252, "agent": "Kieu Tam Ly", "contact": "Zalo/WhatsApp +84 973 747 373", "description": "Pair of land plots at Khue My Dong 14, facing a park, 204m2 with 12m width.", "scraped_at": "2026-08-31T00:00:00"}, {"title": "Prime My Khe Beach Location for Sale", "url": "https://danangmls.com/listing/prime-my-khe-beach-location-for-sale-jozmpk", "price_usd": 178000, "size_m2": null, "price_per_m2_usd": null, "bedrooms": 0, "property_type": "Land", "district": "Ngu Hanh Son", "listed_text": "unknown", "listed_approx_date": "", "latitude": 16.02, "longitude": 108.25, "agent": "", "contact": "", "description": "Prime location close to My Khe beach.", "scraped_at": "2026-08-31T00:00:00"}, {"title": "Prime Location for Sale with My Khe Beach Access", "url": "https://danangmls.com/listing/prime-location-for-sale-with-my-khe-beach-access-1fe4jf", "price_usd": 171000, "size_m2": null, "price_per_m2_usd": null, "bedrooms": 0, "property_type": "Land", "district": "Ngu Hanh Son", "listed_text": "unknown", "listed_approx_date": "", "latitude": 16.03, "longitude": 108.248, "agent": "", "contact": "", "description": "Land plot with My Khe beach access.", "scraped_at": "2026-08-31T00:00:00"}, {"title": "Rare Land Opposite Park in University Village for Sale", "url": "https://danangmls.com/listing/rare-land-opposite-park-in-university-village-for-sale-lrmgpr", "price_usd": 243200, "size_m2": null, "price_per_m2_usd": null, "bedrooms": 0, "property_type": "Land", "district": "Ngu Hanh Son", "listed_text": "unknown", "listed_approx_date": "", "latitude": 15.98, "longitude": 108.255, "agent": "", "contact": "", "description": "Land opposite a park near FPT University village.", "scraped_at": "2026-08-31T00:00:00"}, {"title": "Prime Riverfront Villa Land for Sale in Nam Viet A", "url": "https://danangmls.com/", "price_usd": 950000, "size_m2": null, "price_per_m2_usd": null, "bedrooms": 0, "property_type": "Land", "district": "Ngu Hanh Son", "listed_text": "unknown", "listed_approx_date": "", "latitude": 15.97, "longitude": 108.24, "agent": "", "contact": "", "description": "Riverfront villa land in Nam Viet A.", "scraped_at": "2026-08-31T00:00:00"}, {"title": "Prime Coastal Land Plot for Sale Near Da Nang Beach", "url": "https://www.danangmls.com/listing/prime-coastal-land-plot-for-sale-near-da-nang-beach-1gdvaj", "price_usd": 228500, "size_m2": 1022, "price_per_m2_usd": 224, "bedrooms": 0, "property_type": "Land", "district": "Not provided", "listed_text": "unknown", "listed_approx_date": "", "latitude": 16.09, "longitude": 108.22, "agent": "", "contact": "", "description": "Urgent sale, 30m from the beach, Thang Truong Commune, 1022m2 with 300m2 residential.", "scraped_at": "2026-08-31T00:00:00"}];
+loadData(SAMPLE);
+</script>
+</body>
+</html>
