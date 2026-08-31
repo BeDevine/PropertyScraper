@@ -187,8 +187,9 @@
     <p>Loads whatever your scraper collects. Filter by district, price, size — browse as a table or a map.</p>
   </div>
   <div class="upload-area">
-    <label class="upload-btn" for="fileInput">Load listings.json</label>
+    <label class="upload-btn" for="fileInput">Load file</label>
     <input type="file" id="fileInput" accept="application/json">
+    <button class="upload-btn" id="urlLoadBtn" style="margin-left:6px;">Load from URL</button>
     <div id="loadStatus" style="margin-top:6px;">Showing sample data — load your own scrape to replace it.</div>
   </div>
 </header>
@@ -399,6 +400,24 @@ document.getElementById('fileInput').addEventListener('change', e=>{
     }
   };
   reader.readAsText(file);
+});
+
+document.getElementById('urlLoadBtn').addEventListener('click', async ()=>{
+  const url = prompt(
+    'Paste the raw JSON URL (e.g. your GitHub raw link to data/listings.json):',
+    'https://raw.githubusercontent.com/BeDevine/PropertyScraper/main/data/listings.json'
+  );
+  if(!url) return;
+  document.getElementById('loadStatus').textContent = 'Loading…';
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    loadData(data);
+    document.getElementById('loadStatus').textContent = `Loaded ${data.length} listings from URL`;
+  }catch(err){
+    document.getElementById('loadStatus').textContent = `Could not load that URL: ${err.message}. Make sure it's a raw.githubusercontent.com link, not a github.com page link.`;
+  }
 });
 
 ['districtFilter','typeFilter','sortBy'].forEach(id=>
