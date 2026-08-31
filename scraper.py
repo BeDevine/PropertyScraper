@@ -238,13 +238,20 @@ def parse_listing_page(soup: BeautifulSoup, url: str) -> Listing:
                 listing.property_type = t.capitalize()
                 break
 
-    # --- Contact: extract a real phone/Zalo number from the description text,
-    # not the raw JSON-LD blob ---
-    listing.contact = extract_contact_phone(listing.description)
+        # --- Contact: extract a real phone/Zalo number from the description text,
+        # not the raw JSON-LD blob ---
+        listing.contact = extract_contact_phone(listing.description)
 
-    listing.latitude, listing.longitude = extract_coords_from_map(soup)
+        # --- "Listed X ago": this is page UI text, not part of the JSON-LD block,
+        # so it needs its own separate lookup ---
+        listed_tag = soup.find(string=re.compile(r"\bago\b"))
+        if listed_tag:
+            listing.listed_text = listed_tag.strip()
+            listing.listed_approx_date = parse_relative_date(listing.listed_text)
+    
+        listing.latitude, listing.longitude = extract_coords_from_map(soup)
 
-    return listing
+        return listing
 
 
 def dedupe_listings(listings: list[Listing]) -> list[Listing]:
