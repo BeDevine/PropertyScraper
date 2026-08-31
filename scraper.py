@@ -816,126 +816,35 @@ def crawl(args) -> list[Listing]:
     )
 
 
-def save_outputs(
-    listings: list[Listing],
-    outdir: Path
-):
+def save_outputs(listings: list[Listing], outdir: Path, source: str = "danangmls"):
+    outdir.mkdir(parents=True, exist_ok=True)
+    hist_dir = outdir / "history"
+    hist_dir.mkdir(exist_ok=True)
 
-    outdir.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    records = [asdict(l) for l in listings]
+    for r in records:
+        r["source"] = source
 
-    hist_dir = (
-        outdir / "history"
-    )
+    json_path = outdir / f"listings_{source}.json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(records, f, ensure_ascii=False, indent=2)
 
-    hist_dir.mkdir(
-        exist_ok=True
-    )
-
-    records = [
-        asdict(listing)
-        for listing in listings
-    ]
-
-    # --------------------------------------------------
-    # JSON
-    # --------------------------------------------------
-
-    json_path = (
-        outdir / "listings.json"
-    )
-
-    with open(
-        json_path,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            records,
-            f,
-            ensure_ascii=False,
-            indent=2
-        )
-
-    # --------------------------------------------------
-    # CSV
-    # --------------------------------------------------
-
-    csv_path = (
-        outdir / "listings.csv"
-    )
-
+    csv_path = outdir / f"listings_{source}.csv"
     if records:
-
-        with open(
-            csv_path,
-            "w",
-            encoding="utf-8",
-            newline=""
-        ) as f:
-
-            writer = csv.DictWriter(
-                f,
-                fieldnames=records[0].keys()
-            )
-
+        with open(csv_path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=records[0].keys())
             writer.writeheader()
+            writer.writerows(records)
 
-            writer.writerows(
-                records
-            )
+    stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    snapshot_path = hist_dir / f"listings_{source}_{stamp}.json"
+    with open(snapshot_path, "w", encoding="utf-8") as f:
+        json.dump(records, f, ensure_ascii=False, indent=2)
 
-    # --------------------------------------------------
-    # HISTORY SNAPSHOT
-    # --------------------------------------------------
-
-    stamp = datetime.now(
-        UTC
-    ).strftime(
-        "%Y%m%d_%H%M%S"
-    )
-
-    snapshot_path = (
-        hist_dir
-        / f"listings_{stamp}.json"
-    )
-
-    with open(
-        snapshot_path,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            records,
-            f,
-            ensure_ascii=False,
-            indent=2
-        )
-
-    # --------------------------------------------------
-    # SUMMARY
-    # --------------------------------------------------
-
-    print(
-        f"\nSaved {len(records)} listings:"
-    )
-
-    print(
-        f"  {json_path}"
-    )
-
-    print(
-        f"  {csv_path}"
-    )
-
-    print(
-        f"  {snapshot_path}"
-        "  (dated snapshot)"
-    )
+    print(f"\nSaved {len(records)} listings:")
+    print(f"  {json_path}")
+    print(f"  {csv_path}")
+    print(f"  {snapshot_path}  (dated snapshot, for tracking changes over time)")
 
 
 def main():
