@@ -31,3 +31,4 @@ jobs:
           git add data/
           git diff --staged --quiet || git commit -m "Update listings data $(date -u +%Y-%m-%d)"
           git push
+
