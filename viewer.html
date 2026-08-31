@@ -200,6 +200,10 @@
     <select id="districtFilter"><option value="">All</option></select>
   </div>
   <div class="field">
+    <label>Source</label>
+    <select id="sourceFilter"><option value="">All</option></select>
+  </div>
+  <div class="field">
     <label>Type</label>
     <select id="typeFilter"><option value="">All</option></select>
   </div>
@@ -245,6 +249,7 @@
         <tr>
           <th data-key="title">Listing</th>
           <th data-key="district">District</th>
+          <th data-key="source">Source</th>
           <th data-key="property_type">Type</th>
           <th data-key="price_usd">Price</th>
           <th data-key="size_m2">Size</th>
@@ -269,7 +274,7 @@ const fmtSize = v => v == null ? '—' : Math.round(v).toLocaleString() + ' m²'
 function isFresh(listedText){
   if(!listedText) return false;
   const m = listedText.match(/(\d+)\s+(day|week)/);
-  return !!m; // days or weeks ago = fresh-ish; months/years are not
+  return !!m;
 }
 
 function populateSelect(id, values){
@@ -291,6 +296,7 @@ function median(arr){
 
 function getFiltered(){
   const district = document.getElementById('districtFilter').value;
+  const source = document.getElementById('sourceFilter').value;
   const type = document.getElementById('typeFilter').value;
   const priceMin = parseFloat(document.getElementById('priceMin').value);
   const priceMax = parseFloat(document.getElementById('priceMax').value);
@@ -299,6 +305,7 @@ function getFiltered(){
 
   let list = allListings.filter(l=>{
     if(district && l.district !== district) return false;
+    if(source && l.source !== source) return false;
     if(type && l.property_type !== type) return false;
     if(!isNaN(priceMin) && (l.price_usd == null || l.price_usd < priceMin)) return false;
     if(!isNaN(priceMax) && (l.price_usd == null || l.price_usd > priceMax)) return false;
@@ -343,8 +350,9 @@ function render(){
         ${l.description ? `<div class="sub">${l.description.slice(0,110)}${l.description.length>110?'…':''}</div>` : ''}
       </td>
       <td>${l.district || '—'}</td>
+      <td>${l.source || '—'}</td>
       <td>${l.property_type || '—'}</td>
-      <td class="num">${fmtUSD(l.price_usd)}</td>
+      <td class="num">${l.price_usd != null ? fmtUSD(l.price_usd) : (l.price_vnd_text || '—')}</td>
       <td class="num">${fmtSize(l.size_m2)}</td>
       <td class="num">${l.price_per_m2_usd ? '$'+Math.round(l.price_per_m2_usd) : '—'}</td>
       <td><span class="tag ${isFresh(l.listed_text) ? 'fresh' : ''}">${l.listed_text || 'unknown'}</span></td>
@@ -382,6 +390,7 @@ function initMap(){
 function loadData(data){
   allListings = data;
   populateSelect('districtFilter', data.map(l=>l.district));
+  populateSelect('sourceFilter', data.map(l=>l.source));
   populateSelect('typeFilter', data.map(l=>l.property_type));
   render();
 }
@@ -420,7 +429,7 @@ document.getElementById('urlLoadBtn').addEventListener('click', async ()=>{
   }
 });
 
-['districtFilter','typeFilter','sortBy'].forEach(id=>
+['districtFilter','sourceFilter','typeFilter','sortBy'].forEach(id=>
   document.getElementById(id).addEventListener('change', render));
 ['priceMin','priceMax','sizeMin','sizeMax'].forEach(id=>
   document.getElementById(id).addEventListener('input', render));
@@ -428,7 +437,7 @@ document.getElementById('urlLoadBtn').addEventListener('click', async ()=>{
 document.querySelectorAll('#tableView th').forEach(th=>{
   th.addEventListener('click', ()=>{
     const key = th.dataset.key;
-    const map = {title:'title', district:'district', property_type:'property_type',
+    const map = {title:'title', district:'district', source:'source', property_type:'property_type',
       price_usd:'price_asc', size_m2:'size_desc', price_per_m2_usd:'ppm2_asc', listed_text:'newest'};
     if(map[key]) { document.getElementById('sortBy').value = map[key]; render(); }
   });
@@ -450,23 +459,8 @@ document.getElementById('btnMap').addEventListener('click', ()=>{
 });
 
 // Embedded sample data so the viewer works the moment you open it.
-const SAMPLE = [{"title": "Prime Land in Khu\u00ea M\u1ef9 \u0110\u00f4ng for Sale", "url": "https://danangmls.com/listing/prime-land-in-khu-m-ng-for-sale-dswycl", "price_usd": 114000, "size_m2": 204, "price_per_m2_usd": 559, "bedrooms": 0, "property_type": "Land", "district": "Ngu Hanh Son", "listed_text": "2 months ago", "listed_approx_date": "2026-07-01", "latitude": 16.0, "longitude": 108.252, "agent": "Kieu Tam Ly", "contact": "Zalo/WhatsApp +84 973 747 373", "description": "Pair of land plots at Khue My Dong 14, facing a park, 204m2 with 12m width.", "scraped_at": "2026-08-31T00:00:00"}, {"title": "Prime My Khe Beach Location for Sale", "url": "https://danangmls.com/listing/prime-my-khe-beach-location-for-sale-jozmpk", "price_usd": 178000, "size_m2": null, "price_per_m2_usd": null, "bedrooms": 0, "property_type": "Land", "district": "Ngu Hanh Son", "listed_text": "unknown", "listed_approx_date": "", "latitude": 16.02, "longitude": 108.25, "agent": "", "contact": "", "description": "Prime location close to My Khe beach.", "scraped_at": "2026-08-31T00:00:00"}, {"title": "Prime Location for Sale with My Khe Beach Access", "url": "https://danangmls.com/listing/prime-location-for-sale-with-my-khe-beach-access-1fe4jf", "price_usd": 171000, "size_m2": null, "price_per_m2_usd": null, "bedrooms": 0, "property_type": "Land", "district": "Ngu Hanh Son", "listed_text": "unknown", "listed_approx_date": "", "latitude": 16.03, "longitude": 108.248, "agent": "", "contact": "", "description": "Land plot with My Khe beach access.", "scraped_at": "2026-08-31T00:00:00"}, {"title": "Rare Land Opposite Park in University Village for Sale", "url": "https://danangmls.com/listing/rare-land-opposite-park-in-university-village-for-sale-lrmgpr", "price_usd": 243200, "size_m2": null, "price_per_m2_usd": null, "bedrooms": 0, "property_type": "Land", "district": "Ngu Hanh Son", "listed_text": "unknown", "listed_approx_date": "", "latitude": 15.98, "longitude": 108.255, "agent": "", "contact": "", "description": "Land opposite a park near FPT University village.", "scraped_at": "2026-08-31T00:00:00"}, {"title": "Prime Riverfront Villa Land for Sale in Nam Viet A", "url": "https://danangmls.com/", "price_usd": 950000, "size_m2": null, "price_per_m2_usd": null, "bedrooms": 0, "property_type": "Land", "district": "Ngu Hanh Son", "listed_text": "unknown", "listed_approx_date": "", "latitude": 15.97, "longitude": 108.24, "agent": "", "contact": "", "description": "Riverfront villa land in Nam Viet A.", "scraped_at": "2026-08-31T00:00:00"}, {"title": "Prime Coastal Land Plot for Sale Near Da Nang Beach", "url": "https://www.danangmls.com/listing/prime-coastal-land-plot-for-sale-near-da-nang-beach-1gdvaj", "price_usd": 228500, "size_m2": 1022, "price_per_m2_usd": 224, "bedrooms": 0, "property_type": "Land", "district": "Not provided", "listed_text": "unknown", "listed_approx_date": "", "latitude": 16.09, "longitude": 108.22, "agent": "", "contact": "", "description": "Urgent sale, 30m from the beach, Thang Truong Commune, 1022m2 with 300m2 residential.", "scraped_at": "2026-08-31T00:00:00"}];
-fetch('data/listings.json')
-  .then(response => {
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
-  })
-  .then(data => {
-    loadData(data);
-    document.getElementById('loadStatus').textContent =
-      `Loaded ${data.length} listings`;
-  })
-  .catch(error => {
-    console.error(error);
-    loadData(SAMPLE);
-    document.getElementById('loadStatus').textContent =
-      'Could not load listings.json — showing sample data.';
-  });
+const SAMPLE = [{"title": "Prime Land in Khu\u00ea M\u1ef9 \u0110\u00f4ng for Sale", "url": "https://danangmls.com/listing/prime-land-in-khu-m-ng-for-sale-dswycl", "price_usd": 114000, "size_m2": 204, "price_per_m2_usd": 559, "bedrooms": 0, "property_type": "Land", "district": "Ngu Hanh Son", "source": "danangmls", "listed_text": "2 months ago", "listed_approx_date": "2026-07-01", "latitude": 16.0, "longitude": 108.252, "agent": "Kieu Tam Ly", "contact": "Zalo/WhatsApp +84 973 747 373", "description": "Pair of land plots at Khue My Dong 14, facing a park, 204m2 with 12m width.", "scraped_at": "2026-08-31T00:00:00"}];
+loadData(SAMPLE);
 </script>
 </body>
 </html>
