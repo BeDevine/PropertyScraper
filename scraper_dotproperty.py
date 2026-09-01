@@ -12,6 +12,7 @@ Usage examples
 --------------
     python3 scraper_dotproperty.py
     python3 scraper_dotproperty.py --max-price-usd 190000 --pages 5
+    python3 scraper_dotproperty.py --debug --pages 1   # diagnose parsing issues
 
 Notes
 -----
@@ -159,11 +160,38 @@ def vnd_display_text(amount_str: str, unit: str | None) -> str:
     return f"\u20ab {amount_str}"
 
 
-def parse_page(soup: BeautifulSoup) -> list[Listing]:
+def parse_page(soup: BeautifulSoup, debug: bool = False) -> list[Listing]:
     listings = []
     seen_urls = set()
 
-    for a in soup.find_all("a", href=re.compile(r"/en/land-for-sale-in-[a-z0-9-]+-da-nang_\d+")):
+    anchors = soup.find_all("a", href=re.compile(r"/en/land-for-sale-in-[a-z0-9-]+-da-nang_\d+"))
+    if debug:
+        print(f"    [debug] matching <a> tags found: {len(anchors)}")
+        if anchors:
+            first_href = anchors[0].get("href", "")
+            print(f"    [debug] first href: {first_href}")
+            container = find_card_container(anchors[0])
+            if container is None:
+                print("    [debug] find_card_container returned None for first anchor")
+                node = anchors[0]
+                for level in range(1, 5):
+                    node = node.find_parent()
+                    if node is None:
+                        break
+                    snippet = node.get_text(" ", strip=True)[:300]
+                    print(f"    [debug] parent level {level} text: {snippet!r}")
+            else:
+                text = container.get_text(" ", strip=True)
+                print(f"    [debug] container text: {text[:300]!r}")
+                print(f"    [debug] CARD_RE match: {bool(CARD_RE.search(text))}")
+        else:
+            print("    [debug] no <a> tags matched the href pattern at all -- "
+                  "checking a sample of ALL hrefs on the page:")
+            all_hrefs = [a.get("href", "") for a in soup.find_all("a", href=True)][:15]
+            for h in all_hrefs:
+                print(f"    [debug]   {h}")
+
+    for a in anchors:
         href = urljoin(BASE, a["href"])
         if href in seen_urls:
             continue
@@ -214,7 +242,7 @@ def crawl(args) -> list[Listing]:
         if soup is None:
             continue
 
-        page_listings = parse_page(soup)
+        page_listings = parse_page(soup, debug=(args.debug and page == 1))
         new_count = sum(1 for l in page_listings if l.url not in all_listings)
         print(f"  found {len(page_listings)} listings ({new_count} new)")
 
@@ -286,6 +314,8 @@ def main():
                          help="Seconds to wait between requests")
     parser.add_argument("--outdir", type=Path, default=Path("data"),
                          help="Output directory (default ./data)")
+    parser.add_argument("--debug", action="store_true",
+                         help="Print diagnostic info about the first page's HTML structure")
     args = parser.parse_args()
 
     listings = crawl(args)
