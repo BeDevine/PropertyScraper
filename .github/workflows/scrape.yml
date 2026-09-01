@@ -27,7 +27,7 @@ jobs:
         run: python3 scraper.py --type land --max-price-usd 190000 --pages 15
 
       - name: Run Dot Property scraper
-        run: python3 scraper_dotproperty.py --max-price-usd 190000 --pages 1 --debug
+        run: python3 scraper_dotproperty.py --max-price-usd 190000 --pages 10
 
       - name: Merge sources
         run: python3 merge_listings.py data
