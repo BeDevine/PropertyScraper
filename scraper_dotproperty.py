@@ -167,43 +167,36 @@ def parse_page(soup: BeautifulSoup, debug: bool = False) -> list[Listing]:
     anchors = soup.find_all("a", href=re.compile(r"/en/land-for-sale-in-[a-z0-9-]+-da-nang_\d+"))
     if debug:
         print(f"    [debug] matching <a> tags found: {len(anchors)}")
-        if anchors:
-            first_href = anchors[0].get("href", "")
-            print(f"    [debug] first href: {first_href}")
-            container = find_card_container(anchors[0])
-            if container is None:
-                print("    [debug] find_card_container returned None for first anchor")
-                node = anchors[0]
-                for level in range(1, 5):
-                    node = node.find_parent()
-                    if node is None:
-                        break
-                    snippet = node.get_text(" ", strip=True)[:300]
-                    print(f"    [debug] parent level {level} text: {snippet!r}")
-            else:
-                text = container.get_text(" ", strip=True)
-                print(f"    [debug] container text: {text[:300]!r}")
-                print(f"    [debug] CARD_RE match: {bool(CARD_RE.search(text))}")
-        else:
-            print("    [debug] no <a> tags matched the href pattern at all -- "
-                  "checking a sample of ALL hrefs on the page:")
-            all_hrefs = [a.get("href", "") for a in soup.find_all("a", href=True)][:15]
-            for h in all_hrefs:
-                print(f"    [debug]   {h}")
+        own_text_matches = sum(1 for a in anchors if CARD_RE.search(a.get_text(" ", strip=True)))
+        print(f"    [debug] anchors whose OWN text matches CARD_RE: {own_text_matches}")
+        for i, a in enumerate(anchors[:6]):
+            t = a.get_text(" ", strip=True)
+            print(f"    [debug] anchor {i} href={a.get('href','')[:70]} "
+                  f"own_text_len={len(t)} own_text={t[:120]!r}")
 
     for a in anchors:
         href = urljoin(BASE, a["href"])
         if href in seen_urls:
             continue
 
-        container = find_card_container(a)
-        if container is None:
-            continue
+        # The full listing text (title, district, price, size, description)
+        # lives directly in the anchor's own text for the "title" anchor --
+        # image-carousel anchors that share the same href have empty text
+        # and simply won't match here, so they're naturally skipped without
+        # needing a container walk-up.
+        own_text = a.get_text(" ", strip=True)
+        m = CARD_RE.search(own_text)
+        text = own_text
 
-        text = container.get_text(" ", strip=True)
-        m = CARD_RE.search(text)
         if not m:
-            continue
+            # Fallback for any cards where the markup differs.
+            container = find_card_container(a)
+            if container is None:
+                continue
+            text = container.get_text(" ", strip=True)
+            m = CARD_RE.search(text)
+            if not m:
+                continue
 
         seen_urls.add(href)
         sub_district, district, price_amount, price_unit, size_str = m.groups()
