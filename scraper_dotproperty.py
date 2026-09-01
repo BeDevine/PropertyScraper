@@ -80,7 +80,7 @@ VND_PER_USD = 26000
 # this (see conversation notes) -- not guessed blind.
 CARD_RE = re.compile(
     r"Land for sale in ([^,]+), Da Nang ([A-Za-zÀ-ỹ\s]+? District), Da Nang\s*"
-    r"\u20ab\s*([\d,.]+)\s*(billion|million)?\s*-\s*([\d.,]+)\s*m2",
+    r"\u20ab\s*([\d,.]+)\s*(billion|million)?\s*-?\s*([\d.,]+)\s*m\s*2",
     re.I,
 )
 
