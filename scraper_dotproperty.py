@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+import sys as _sys
+# Disabled 2026-10-03: Dot Property data had been frozen since 1 Sep and listings had no dates.
+# Delete these three lines to turn it back on.
+print("Dot Property scraper disabled - skipping."); _sys.exit(0)
 """
 Dot Property (dotproperty.com.vn) scraper
 ==========================================
